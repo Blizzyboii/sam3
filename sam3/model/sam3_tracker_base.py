@@ -12,7 +12,12 @@ from sam3.model.sam3_tracker_utils import get_1d_sine_pe, select_closest_cond_fr
 from sam3.sam.mask_decoder import MaskDecoder, MLP
 from sam3.sam.prompt_encoder import PromptEncoder
 from sam3.sam.transformer import TwoWayTransformer
-from sam3.train.data.collator import BatchedDatapoint
+
+try:
+    from sam3.train.data.collator import BatchedDatapoint
+except ImportError:
+    # For inference-only, BatchedDatapoint is not needed
+    BatchedDatapoint = None  # type: ignore
 
 try:
     from timm.layers import trunc_normal_
@@ -434,7 +439,7 @@ class Sam3TrackerBase(torch.nn.Module):
             object_score_logits,
         )
 
-    def forward(self, input: BatchedDatapoint, is_inference=False):
+    def forward(self, input, is_inference=False):
         raise NotImplementedError(
             "Please use the corresponding methods in SAM3VideoPredictor for inference."
             "See examples/sam3_dense_video_tracking.ipynb for an inference example."

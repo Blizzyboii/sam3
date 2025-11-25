@@ -39,18 +39,22 @@ class Sam3VideoPredictor:
         self.video_loader_type = video_loader_type
         from sam3.model_builder import build_sam3_video_model
 
-        self.model = (
-            build_sam3_video_model(
-                checkpoint_path=checkpoint_path,
-                bpe_path=bpe_path,
-                has_presence_token=has_presence_token,
-                geo_encoder_use_img_cross_attn=geo_encoder_use_img_cross_attn,
-                strict_state_dict_loading=strict_state_dict_loading,
-                apply_temporal_disambiguation=apply_temporal_disambiguation,
-            )
-            .cuda()
-            .eval()
+        model = build_sam3_video_model(
+            checkpoint_path=checkpoint_path,
+            bpe_path=bpe_path,
+            has_presence_token=has_presence_token,
+            geo_encoder_use_img_cross_attn=geo_encoder_use_img_cross_attn,
+            strict_state_dict_loading=strict_state_dict_loading,
+            apply_temporal_disambiguation=apply_temporal_disambiguation,
         )
+        
+        # Move model to appropriate device (CUDA if available, else CPU)
+        if torch.cuda.is_available():
+            model = model.cuda()
+        else:
+            model = model.cpu()
+        
+        self.model = model.eval()
 
     @torch.inference_mode()
     def handle_request(self, request):
@@ -289,9 +293,34 @@ class Sam3VideoPredictor:
 
 class Sam3VideoPredictorMultiGPU(Sam3VideoPredictor):
     def __init__(self, *model_args, gpus_to_use=None, **model_kwargs):
+        # Check if CUDA is available; if not, just use the parent class
+        if not torch.cuda.is_available():
+            logger.warning("CUDA not available. Using single-GPU predictor mode instead.")
+            super().__init__(*model_args, **model_kwargs)
+            self.gpus_to_use = []
+            self.device = torch.device("cpu")
+            self.has_shutdown = False
+            self.rank = 0
+            self.world_size = 1
+            self.rank_str = "rank=0 with world_size=1"
+            self.command_queues = {}
+            return
+            
         if gpus_to_use is None:
             # if not specified, use only the current GPU by default
-            gpus_to_use = [torch.cuda.current_device()]
+            try:
+                gpus_to_use = [torch.cuda.current_device()]
+            except (AssertionError, RuntimeError):
+                logger.warning("Could not get current CUDA device. Using single-GPU mode.")
+                super().__init__(*model_args, **model_kwargs)
+                self.gpus_to_use = []
+                self.device = torch.device("cpu")
+                self.has_shutdown = False
+                self.rank = 0
+                self.world_size = 1
+                self.rank_str = "rank=0 with world_size=1"
+                self.command_queues = {}
+                return
 
         IS_MAIN_PROCESS = os.getenv("IS_MAIN_PROCESS", "1") == "1"
         if IS_MAIN_PROCESS:

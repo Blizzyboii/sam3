@@ -45,11 +45,15 @@ from sam3.sam.transformer import RoPEAttention
 # Setup TensorFloat-32 for Ampere GPUs if available
 def _setup_tf32() -> None:
     """Enable TensorFloat-32 for Ampere GPUs if available."""
-    if torch.cuda.is_available():
-        device_props = torch.cuda.get_device_properties(0)
-        if device_props.major >= 8:
-            torch.backends.cuda.matmul.allow_tf32 = True
-            torch.backends.cudnn.allow_tf32 = True
+    try:
+        if torch.cuda.is_available():
+            device_props = torch.cuda.get_device_properties(0)
+            if device_props.major >= 8:
+                torch.backends.cuda.matmul.allow_tf32 = True
+                torch.backends.cudnn.allow_tf32 = True
+    except (AssertionError, RuntimeError):
+        # CUDA not available or not properly initialized (e.g., on M3 Mac)
+        pass
 
 
 _setup_tf32()
@@ -549,6 +553,9 @@ def _setup_device_and_mode(model, device, eval_mode):
     """Setup model device and evaluation mode."""
     if device == "cuda":
         model = model.cuda()
+    elif device == "cpu":
+        model = model.cpu()
+    # Note: for other devices like "mps", PyTorch handles it automatically
     if eval_mode:
         model.eval()
     return model

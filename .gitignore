@@ -151,3 +151,14 @@ Thumbs.db
 # BPE vocabulary files
 *.bpe
 *.vocab
+
+# Test images and outputs
+*.jpg
+*.jpeg
+*.png
+*.mp4
+*.mov
+output/
+outputs/
+test_data/
+
